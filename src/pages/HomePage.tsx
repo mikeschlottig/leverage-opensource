@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api-client';
 import { Project } from '@shared/types';
 import { useState } from 'react';
-import { useAuthContext } from '@/main';
+import { useAuthContext } from '@/hooks/useAuthContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -153,7 +153,7 @@ export function HomePage() {
           </section>
         </main>
         <footer className="text-center py-8 text-muted-foreground/80">
-          <p>Built with ❤️ at Cloudflare</p>
+          <p>Built with ❤��� at Cloudflare</p>
         </footer>
       </div>
       <Toaster richColors />
