@@ -43,6 +43,7 @@ export interface ComponentSpec {
   exportFormats?: ExportFormat[];
   version: string;
   revisions?: ComponentSpec[];
+  publishUrl?: string;
 }
 export interface MechanismOfAction {
   name: string;

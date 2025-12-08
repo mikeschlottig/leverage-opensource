@@ -7,14 +7,14 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Cuboid, Download, FileCode, Layers, Settings, Copy, UploadCloud, Loader2 } from 'lucide-react';
+import { Cuboid, Download, FileCode, Layers, Settings, Copy, UploadCloud, Loader2, CheckCircle } from 'lucide-react';
 import { ComponentPreview } from '@/components/ComponentPreview';
 import { Toaster, toast } from '@/components/ui/sonner';
 import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import JSZip from 'jszip';
-import { useAuthContext } from '@/main';
+import { useAuthContext, ProtectedRoute } from '@/components/AuthProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 export default function ComponentStudio() {
   const { patternId } = useParams<{ patternId: string }>();
@@ -22,15 +22,12 @@ export default function ComponentStudio() {
   const queryClient = useQueryClient();
   const { sessionId, isAuthenticated, isLoading: isAuthLoading } = useAuthContext();
   const [componentName, setComponentName] = useState('');
+  const [createdComponent, setCreatedComponent] = useState<ComponentSpec | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<ComponentSpec | null>(null);
   const { data: pattern, isLoading: isLoadingPattern } = useQuery<Pattern>({
     queryKey: ['pattern', patternId],
     queryFn: () => api(`/api/patterns/${patternId}`),
     enabled: !!patternId,
-  });
-  const { data: createdComponent, isSuccess: isComponentCreated } = useQuery<ComponentSpec>({
-    queryKey: ['createdComponent', patternId, componentName],
-    enabled: false, // This query is manually populated
   });
   const { data: revisions, isLoading: isLoadingRevisions } = useQuery<ComponentSpec[]>({
     queryKey: ['revisions', createdComponent?.id],
@@ -44,18 +41,31 @@ export default function ComponentStudio() {
     }
   }, [pattern, componentName]);
   const createComponentMutation = useMutation<ComponentSpec, Error, { patternId: string; name: string }>({
-    mutationFn: (vars) => api('/api/components', { 
-      method: 'POST', 
+    mutationFn: (vars) => api('/api/components', {
+      method: 'POST',
       body: JSON.stringify(vars),
       headers: { 'X-Session-Id': sessionId! }
     }),
     onSuccess: (data) => {
       toast.success(`Component "${data.name}" created successfully!`);
-      queryClient.setQueryData(['createdComponent', patternId, componentName], data);
+      setCreatedComponent(data);
       setSelectedVersion(data);
       api('/api/telemetry', { method: 'POST', body: JSON.stringify({ event: 'component_export', data: { componentId: data.id } }) });
     },
     onError: (error) => toast.error(`Failed to create component: ${error.message}`)
+  });
+  const publishMutation = useMutation<{ publishUrl: string }, Error, string>({
+    mutationFn: (componentId) => api(`/api/components/${componentId}/publish`, {
+      method: 'POST',
+      headers: { 'X-Session-Id': sessionId! }
+    }),
+    onSuccess: (data, componentId) => {
+      toast.success('Component published to mock registry!');
+      queryClient.invalidateQueries({ queryKey: ['revisions', componentId] });
+      setCreatedComponent(prev => prev ? { ...prev, publishUrl: data.publishUrl } : null);
+      setSelectedVersion(prev => prev ? { ...prev, publishUrl: data.publishUrl } : null);
+    },
+    onError: (error) => toast.error(`Failed to publish: ${error.message}`)
   });
   const handleGenerate = () => {
     if (!patternId || !componentName.trim()) {
@@ -84,7 +94,6 @@ export default function ComponentStudio() {
     toast.success('Component package downloaded!');
   };
   if (isAuthLoading || isLoadingPattern) return <ComponentStudioSkeleton />;
-  if (!isAuthenticated) return <Navigate to="/" />;
   if (!pattern) return <AppLayout><div className="flex items-center justify-center h-screen text-muted-foreground">Pattern not found.</div></AppLayout>;
   const componentToPreview = selectedVersion || createdComponent;
   return (
@@ -92,7 +101,7 @@ export default function ComponentStudio() {
       <ThemeToggle />
       <Toaster richColors />
       <AnimatePresence>
-        {createComponentMutation.isPending && (
+        {(createComponentMutation.isPending || publishMutation.isPending) && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
@@ -107,7 +116,7 @@ export default function ComponentStudio() {
             <h1 className="text-4xl font-display font-bold">Component Studio</h1>
             <p className="text-muted-foreground mt-2">Preview, configure, and export your generated component from the "{pattern?.title}" pattern.</p>
           </motion.header>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-3 gap-8 items-start">
             <motion.main initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5, delay: 0.2 }} className="lg:col-span-2">
               <Card className="h-full"><CardHeader><CardTitle className="flex items-center gap-2"><Cuboid /> Live Preview</CardTitle></CardHeader>
                 <CardContent>
@@ -123,7 +132,7 @@ export default function ComponentStudio() {
               </Card>
               {componentToPreview && (
                 <Card>
-                  <CardHeader><CardTitle>Export</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>Export & Publish</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
                     {revisions && revisions.length > 0 && (
                       <Select onValueChange={(v) => setSelectedVersion(revisions.find(r => r.version === v) || null)}>
@@ -135,7 +144,11 @@ export default function ComponentStudio() {
                     )}
                     <Button variant="outline" className="w-full" onClick={() => handleCopy(componentToPreview)}><Copy className="w-4 h-4 mr-2" /> Copy Snippet</Button>
                     <Button className="w-full" onClick={() => handleDownloadZip(componentToPreview)}><Download className="w-4 h-4 mr-2" /> Download ZIP</Button>
-                    <Button variant="secondary" className="w-full" onClick={() => toast.info('Publishing to VibeSDK (simulation)...')}><UploadCloud className="w-4 h-4 mr-2" /> Push to VibeSDK</Button>
+                    {componentToPreview.publishUrl ? (
+                      <Button variant="secondary" className="w-full" asChild><a href={componentToPreview.publishUrl} target="_blank" rel="noopener noreferrer"><CheckCircle className="w-4 h-4 mr-2 text-green-500" /> View in Registry</a></Button>
+                    ) : (
+                      <Button variant="secondary" className="w-full" onClick={() => publishMutation.mutate(componentToPreview.id)} disabled={publishMutation.isPending}><UploadCloud className="w-4 h-4 mr-2" /> Publish to Registry</Button>
+                    )}
                   </CardContent>
                 </Card>
               )}

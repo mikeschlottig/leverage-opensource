@@ -161,6 +161,22 @@ export const ${name} = ({ title }) => (
     const state = await component.getState();
     return ok(c, { revisions: state.revisions ?? [] });
   });
+  app.post('/api/components/:id/publish', async (c) => {
+    const user = await getAuthedUser(c);
+    if (!user) return bad(c, 'Unauthorized');
+    const componentId = c.req.param('id');
+    const componentEntity = new ComponentEntity(c.env, componentId);
+    if (!await componentEntity.exists()) return notFound(c, 'component not found');
+    const component = await componentEntity.getState();
+    const projectEntity = new ProjectEntity(c.env, component.projectId);
+    if (!await projectEntity.exists()) return notFound(c, 'Associated project not found');
+    const project = await projectEntity.getState();
+    if (project.ownerId !== user.id) return bad(c, 'Unauthorized: You do not own this project.');
+    const publishUrl = `https://mock-registry.dev/pkg/${component.name}@${component.version}`;
+    await componentEntity.patch({ publishUrl });
+    console.log('[TELEMETRY]', { event: 'component_publish', data: { componentId, publishUrl } });
+    return ok(c, { publishUrl });
+  });
   // --- Original Demo Routes ---
   // USERS
   app.get('/api/users', async (c) => {

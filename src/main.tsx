@@ -1,14 +1,11 @@
 import '@/lib/errorReporter';
 import { enableMapSet } from "immer";
 enableMapSet();
-import React, { StrictMode, createContext, useContext } from 'react'
+import React, { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   createBrowserRouter,
   RouterProvider,
-  redirect,
-  useLocation,
-  Navigate,
 } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -20,28 +17,8 @@ import ProjectExplorer from '@/pages/ProjectExplorer';
 import ComponentStudio from '@/pages/ComponentStudio';
 import PatternLibrary from '@/pages/PatternLibrary';
 import IntegrationsPane from '@/pages/IntegrationsPane';
-import { useAuth } from './lib/auth';
 import { GlobalLoader } from './components/GlobalLoader';
-type AuthContextType = ReturnType<typeof useAuth>;
-const AuthContext = createContext<AuthContextType | null>(null);
-export function useAuthContext() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuthContext must be used within an AuthProvider");
-  }
-  return context;
-}
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuthContext();
-  const location = useLocation();
-  if (isLoading) {
-    return <GlobalLoader />;
-  }
-  if (!isAuthenticated) {
-    return <Navigate to="/" state={{ from: location }} replace />;
-  }
-  return <>{children}</>;
-}
+import { AuthProvider, ProtectedRoute } from './components/AuthProvider';
 const router = createBrowserRouter([
   {
     path: "/",
@@ -76,12 +53,11 @@ const router = createBrowserRouter([
 ]);
 const queryClient = new QueryClient();
 function App() {
-  const auth = useAuth();
   return (
-    <AuthContext.Provider value={auth}>
+    <AuthProvider>
       <GlobalLoader />
       <RouterProvider router={router} />
-    </AuthContext.Provider>
+    </AuthProvider>
   );
 }
 createRoot(document.getElementById('root')!).render(

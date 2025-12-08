@@ -1,8 +1,16 @@
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { GlobalLoader } from './GlobalLoader';
-import { AuthContext, useAuthContext } from '@/hooks/useAuthContext';
+type AuthContextType = ReturnType<typeof useAuth>;
+const AuthContext = createContext<AuthContextType | null>(null);
+export function useAuthContext() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuthContext must be used within an AuthProvider");
+  }
+  return context;
+}
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
   return (

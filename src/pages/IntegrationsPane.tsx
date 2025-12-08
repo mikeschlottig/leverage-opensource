@@ -9,8 +9,10 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { Pattern } from '@shared/types';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { toast } from '@/components/ui/sonner';
 const MOCK_DOCS: Record<string, { title: string; url: string }[]> = {
   'ingestion': [
     { title: 'Core Concepts: Traversal', url: 'https://docs.crawl4ai.com/concepts/traversal' },
@@ -34,21 +36,37 @@ const MOCK_DOCS: Record<string, { title: string; url: string }[]> = {
 export default function IntegrationsPane() {
   const { contextId } = useParams<{ contextId: string }>();
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: pattern, isLoading } = useQuery<Pattern>({
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [isDocsLoading, setIsDocsLoading] = useState(false);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+  const { data: pattern, isLoading: isLoadingPattern } = useQuery<Pattern>({
     queryKey: ['pattern', contextId],
     queryFn: () => api(`/api/patterns/${contextId}`),
     enabled: !!contextId,
   });
+  useEffect(() => {
+    if (pattern) {
+      setIsDocsLoading(true);
+      const timer = setTimeout(() => setIsDocsLoading(false), 500); // Simulate fetch delay
+      return () => clearTimeout(timer);
+    }
+  }, [pattern]);
   const relevantDocs = useMemo(() => {
     const categories = pattern?.tags ?? Object.keys(MOCK_DOCS);
     const docs: Record<string, { title: string; url: string }[]> = {};
     categories.forEach(cat => {
       if (MOCK_DOCS[cat]) {
-        docs[cat] = MOCK_DOCS[cat].filter(doc => doc.title.toLowerCase().includes(searchTerm.toLowerCase()));
+        docs[cat] = MOCK_DOCS[cat].filter(doc => doc.title.toLowerCase().includes(debouncedSearchTerm.toLowerCase()));
       }
     });
     return docs;
-  }, [pattern, searchTerm]);
+  }, [pattern, debouncedSearchTerm]);
+  const hasResults = Object.values(relevantDocs).some(links => links.length > 0);
   return (
     <AppLayout>
       <ThemeToggle />
@@ -61,25 +79,33 @@ export default function IntegrationsPane() {
           <div className="max-w-3xl mx-auto">
             <Card>
               <CardHeader>
-                {isLoading && contextId ? (<><Skeleton className="h-8 w-3/4" /><Skeleton className="h-4 w-1/2 mt-2" /></>) : pattern ? (<><CardTitle>Context: {pattern.title}</CardTitle><CardDescription>Relevant documentation for the selected pattern.</CardDescription></>) : (<><CardTitle>Documentation Hub</CardTitle><CardDescription>Find relevant articles from docs.crawl4ai.com and deepwiki.com.</CardDescription></>)}
+                {isLoadingPattern && contextId ? (<><Skeleton className="h-8 w-3/4" /><Skeleton className="h-4 w-1/2 mt-2" /></>) : pattern ? (<><CardTitle>Context: {pattern.title}</CardTitle><CardDescription>Relevant documentation for the selected pattern.</CardDescription></>) : (<><CardTitle>Documentation Hub</CardTitle><CardDescription>Find relevant articles from docs.crawl4ai.com and deepwiki.com.</CardDescription></>)}
                 <div className="mt-4 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" /><Input placeholder="Search documentation..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
               </CardHeader>
               <CardContent>
-                <Accordion type="multiple" className="w-full" defaultValue={Object.keys(relevantDocs)}>
-                  {Object.entries(relevantDocs).map(([category, links]) => links.length > 0 && (
-                    <AccordionItem value={category} key={category}>
-                      <AccordionTrigger className="capitalize text-lg">{category}</AccordionTrigger>
-                      <AccordionContent><ul className="space-y-3">
-                        {links.map(link => (
-                          <li key={link.url}><a href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 rounded-md hover:bg-muted transition-colors group">
-                            <div className="flex items-center gap-3">{link.url.includes('crawl4ai') ? <BookOpen className="w-5 h-5 text-primary" /> : <LinkIcon className="w-5 h-5 text-indigo-400" />}<div><p className="font-medium">{link.title}</p><p className="text-xs text-muted-foreground">{new URL(link.url).hostname}</p></div></div>
-                            <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </a></li>
-                        ))}
-                      </ul></AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+                {isDocsLoading ? (
+                  <div className="space-y-4"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>
+                ) : hasResults ? (
+                  <Accordion type="multiple" className="w-full" defaultValue={Object.keys(relevantDocs)}>
+                    {Object.entries(relevantDocs).map(([category, links]) => links.length > 0 && (
+                      <AccordionItem value={category} key={category}>
+                        <AccordionTrigger className="capitalize text-lg">{category}</AccordionTrigger>
+                        <AccordionContent><ul className="space-y-3">
+                          {links.map(link => (
+                            <motion.li key={link.url} whileHover={{ scale: 1.02 }}><a href={link.url} target="_blank" rel="noopener noreferrer" onClick={() => toast('Opening external documentation...')} className="flex items-center justify-between p-3 rounded-md hover:bg-muted transition-colors group">
+                              <div className="flex items-center gap-3">{link.url.includes('crawl4ai') ? <BookOpen className="w-5 h-5 text-primary" /> : <LinkIcon className="w-5 h-5 text-indigo-400" />}<div><p className="font-medium">{link.title}</p><p className="text-xs text-muted-foreground">{new URL(link.url).hostname}</p></div></div>
+                              <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </a></motion.li>
+                          ))}
+                        </ul></AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>No relevant docs found for this context.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
