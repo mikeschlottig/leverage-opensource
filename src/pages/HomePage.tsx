@@ -1,138 +1,155 @@
-// Home page of the app.
-// Currently a demo placeholder "please wait" screen.
-// Replace this file with your actual app UI. Do not delete it to use some other file as homepage. Simply replace the entire contents of this file.
-
-import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
-
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { HAS_TEMPLATE_DEMO, TemplateDemo } from '@/components/TemplateDemo'
-import { Button } from '@/components/ui/button'
-import { Toaster, toast } from '@/components/ui/sonner'
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { ArrowRight, Code, Cuboid, GitBranch, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { Toaster, toast } from '@/components/ui/sonner';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { api } from '@/lib/api-client';
+import { Project } from '@shared/types';
+import { useState } from 'react';
 export function HomePage() {
-  const [coins, setCoins] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [elapsedMs, setElapsedMs] = useState(0)
-
-  useEffect(() => {
-    if (!isRunning || startedAt === null) return
-
-    const t = setInterval(() => {
-      setElapsedMs(Date.now() - startedAt)
-    }, 250)
-
-    return () => clearInterval(t)
-  }, [isRunning, startedAt])
-
-  const formatted = useMemo(() => formatDuration(elapsedMs), [elapsedMs])
-
-  const onPleaseWait = () => {
-    setCoins((c) => c + 1)
-
-    if (!isRunning) {
-      // Resume from the current elapsed time
-      setStartedAt(Date.now() - elapsedMs)
-      setIsRunning(true)
-      toast.success('Building your app…', {
-        description: "Hang tight — we're setting everything up.",
-      })
-      return
+  const navigate = useNavigate();
+  const [repoUrl, setRepoUrl] = useState('');
+  const [isIngesting, setIsIngesting] = useState(false);
+  const handleIngest = async () => {
+    if (!repoUrl.trim()) {
+      toast.error('Please enter a repository URL.');
+      return;
     }
-
-    setIsRunning(false)
-    toast.info('Still working…', {
-      description: 'You can come back in a moment.',
-    })
-  }
-
-  const onReset = () => {
-    setCoins(0)
-    setIsRunning(false)
-    setStartedAt(null)
-    setElapsedMs(0)
-    toast('Reset complete')
-  }
-
-  const onAddCoin = () => {
-    setCoins((c) => c + 1)
-    toast('Coin added')
-  }
-
+    setIsIngesting(true);
+    try {
+      const newProject = await api<Project>('/api/projects', {
+        method: 'POST',
+        body: JSON.stringify({ name: repoUrl.split('/').pop(), repoUrl }),
+      });
+      toast.success(`Project "${newProject.name}" created. Starting analysis...`);
+      navigate(`/projects/${newProject.id}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to ingest repository.');
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+  const handleQuickIngest = async () => {
+    setIsIngesting(true);
+    try {
+      // This uses the seeded data on the backend
+      toast.success(`Ingesting "codetxt" example...`);
+      navigate(`/projects/proj_codetxt`);
+    } catch (error) {
+      toast.error('Failed to load example project.');
+    } finally {
+      setIsIngesting(false);
+    }
+  };
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
-      <ThemeToggle />
-      <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-
-      <div className="text-center space-y-8 relative z-10 animate-fade-in w-full">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-            <Sparkles className="w-8 h-8 text-white rotating" />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
-          </p>
-        </div>
-
-        {HAS_TEMPLATE_DEMO ? (
-          <div className="max-w-5xl mx-auto text-left">
-            <TemplateDemo />
-          </div>
-        ) : (
-          <>
-            <div className="flex justify-center gap-4">
-              <Button
-                size="lg"
-                onClick={onPleaseWait}
-                className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-                aria-live="polite"
-              >
-                Please Wait
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-              <div>
-                Time elapsed:{' '}
-                <span className="font-medium tabular-nums text-foreground">{formatted}</span>
+    <AppLayout>
+      <div className="relative min-h-screen w-full overflow-hidden">
+        <ThemeToggle className="absolute top-4 right-4 z-20" />
+        <div className="absolute inset-0 -z-10 h-full w-full bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#374151_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        <div 
+          className="absolute top-0 left-0 right-0 -z-10 h-[40rem] w-full bg-cover bg-center"
+          style={{
+            backgroundImage: 'linear-gradient(to bottom, hsl(var(--background)), transparent), radial-gradient(circle at 50% 0, #F3802020, transparent 40%)',
+          }}
+        />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="py-24 md:py-32 lg:py-40 text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tighter">
+                LEVERAGE <span className="text-gradient">OpenSource</span>
+              </h1>
+              <p className="mt-6 max-w-2xl mx-auto text-lg md:text-xl text-muted-foreground">
+                Extract repeatable patterns from repositories and convert them into reusable React components.
+              </p>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="mt-10 max-w-xl mx-auto"
+            >
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  type="text"
+                  placeholder="https://github.com/user/repo"
+                  className="h-12 text-base"
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  disabled={isIngesting}
+                />
+                <Button size="lg" className="h-12 text-base" onClick={handleIngest} disabled={isIngesting}>
+                  {isIngesting ? 'Ingesting...' : 'Ingest Repository'}
+                  <GitBranch className="w-5 h-5 ml-2" />
+                </Button>
               </div>
-              <div>
-                Coins:{' '}
-                <span className="font-medium tabular-nums text-foreground">{coins}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={onReset}>
-                Reset
+              <Button variant="link" className="mt-2 text-muted-foreground" onClick={handleQuickIngest} disabled={isIngesting}>
+                or try with the 'codetxt' example
               </Button>
-              <Button variant="outline" size="sm" onClick={onAddCoin}>
-                Add Coin
-              </Button>
+            </motion.div>
+          </div>
+          <section className="pb-24 md:pb-32">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <FeatureCard
+                icon={<Search />}
+                title="Catalog & Index"
+                description="Searchable index of projects, patterns, and generated components."
+                link="/catalog"
+              />
+              <FeatureCard
+                icon={<Code />}
+                title="Project Explorer"
+                description="View file trees, detected entry points, and ingestion engine breakdowns."
+                link="/projects/proj_codetxt"
+              />
+              <FeatureCard
+                icon={<Cuboid />}
+                title="Component Studio"
+                description="Visually edit, preview, and export generated React components."
+                link="/studio/patt_ingestion_engine"
+              />
             </div>
-          </>
-        )}
+          </section>
+        </main>
+        <footer className="text-center py-8 text-muted-foreground/80">
+          <p>Built with ❤️ at Cloudflare</p>
+        </footer>
       </div>
-
-      <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-        <p>Powered by Cloudflare</p>
-      </footer>
-
-      <Toaster richColors closeButton />
-    </div>
-  )
+      <Toaster richColors />
+    </AppLayout>
+  );
+}
+function FeatureCard({ icon, title, description, link }: { icon: React.ReactNode; title: string; description: string; link: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.5 }}
+      transition={{ duration: 0.5 }}
+    >
+      <Card className="h-full hover:border-primary/50 transition-colors duration-300 hover:shadow-lg">
+        <CardHeader>
+          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-4">
+            {icon}
+          </div>
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">{description}</p>
+          <Button variant="ghost" asChild className="mt-4 p-0 h-auto text-primary">
+            <Link to={link}>
+              Learn More <ArrowRight className="w-4 h-4 ml-2" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
 }
