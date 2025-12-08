@@ -80,7 +80,8 @@ function runSetupCommands() {
     const commands = [
     "bun add react-markdown@^9.0.1",
     "bun add prettier@^3.3.3",
-    "bun add rehype-sanitize@^6.0.0"
+    "bun add rehype-sanitize@^6.0.0",
+    "bun add jszip@^3.10.0"
 ];
     
     if (commands.length === 0) {
