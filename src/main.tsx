@@ -15,6 +15,8 @@ import { HomePage } from '@/pages/HomePage'
 import CatalogPage from '@/pages/CatalogPage';
 import ProjectExplorer from '@/pages/ProjectExplorer';
 import ComponentStudio from '@/pages/ComponentStudio';
+import PatternLibrary from '@/pages/PatternLibrary';
+import IntegrationsPane from '@/pages/IntegrationsPane';
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
   {
@@ -35,6 +37,16 @@ const router = createBrowserRouter([
   {
     path: "/studio/:patternId",
     element: <ComponentStudio />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/library",
+    element: <PatternLibrary />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/integrations/:contextId?",
+    element: <IntegrationsPane />,
     errorElement: <RouteErrorBoundary />,
   },
 ]);
