@@ -81,7 +81,8 @@ function runSetupCommands() {
     "bun add react-markdown@^9.0.1",
     "bun add prettier@^3.3.3",
     "bun add rehype-sanitize@^6.0.0",
-    "bun add jszip@^3.10.0"
+    "bun add jszip@^3.10.0",
+    "bun add jszip @types/jszip"
 ];
     
     if (commands.length === 0) {
