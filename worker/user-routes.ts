@@ -3,7 +3,7 @@ import type { Env } from './core-utils';
 import { UserEntity, ChatBoardEntity, ProjectEntity, PatternEntity, ComponentEntity } from "./entities";
 import { ok, bad, notFound, isStr } from './core-utils';
 import { MOCK_PATTERNS } from "@shared/mock-data";
-import type { IngestionReport, Pattern, Project, ComponentSpec } from "@shared/types";
+import type { IngestionReport, Pattern, Project, ComponentSpec, FileTreeNode } from "@shared/types";
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/test', (c) => c.json({ success: true, data: { name: 'CF Workers Demo' }}));
   // --- LEVERAGE OpenSource Routes ---
@@ -32,25 +32,58 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     await ProjectEntity.create(c.env, newProject);
     return ok(c, newProject);
   });
-  // ANALYSIS (mocked)
+  // ANALYSIS (semi-real)
   app.post('/api/projects/:id/analyze', async (c) => {
     const projectId = c.req.param('id');
-    const project = new ProjectEntity(c.env, projectId);
-    if (!await project.exists()) return notFound(c, 'project not found');
-    await project.patch({ status: 'analyzing', updatedAt: Date.now() });
-    // Simulate analysis delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const report: IngestionReport = {
-      projectId,
-      entryPoints: ['src/ingestion/index.ts'],
-      mechanisms: [
-        { name: 'File System Traversal', description: 'Reads repository file structure.', docsUrl: 'https://docs.crawl4ai.com/concepts/traversal', deepwikiUrl: 'https://deepwiki.com/filesystem-api' },
-        { name: 'AST Parsing', description: 'Parses code into an Abstract Syntax Tree.', docsUrl: 'https://docs.crawl4ai.com/concepts/ast', deepwikiUrl: 'https://deepwiki.com/ast-parsing' },
-      ],
-      patterns: MOCK_PATTERNS.filter(p => p.projectId === projectId),
-    };
-    await project.patch({ status: 'completed', updatedAt: Date.now() });
-    return ok(c, report);
+    const projectEntity = new ProjectEntity(c.env, projectId);
+    if (!await projectEntity.exists()) return notFound(c, 'project not found');
+    await projectEntity.patch({ status: 'analyzing', updatedAt: Date.now() });
+    const project = await projectEntity.getState();
+    try {
+      const url = new URL(project.repoUrl);
+      const pathParts = url.pathname.split('/').filter(Boolean);
+      if (url.hostname !== 'github.com' || pathParts.length < 2) {
+        throw new Error('Invalid GitHub repository URL');
+      }
+      const [owner, repo] = pathParts;
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`;
+      const res = await fetch(apiUrl, { headers: { 'User-Agent': 'LeverageOpenSource-App' } });
+      if (!res.ok) {
+        throw new Error(`GitHub API failed with status ${res.status}`);
+      }
+      const { tree } = await res.json<{ tree: { path: string; type: 'blob' | 'tree'; size?: number }[] }>();
+      const files = tree.filter(item => item.type === 'blob' && (item.path.endsWith('.ts') || item.path.endsWith('.js')));
+      const entryPoints = files.filter(f => /(index|app|main)\.(ts|js)$/.test(f.path)).map(f => f.path);
+      const mechanisms = [];
+      if (files.some(f => f.path.includes('ingest'))) mechanisms.push({ name: 'File System Traversal', description: 'Reads repository file structure.', docsUrl: 'https://docs.crawl4ai.com/concepts/traversal', deepwikiUrl: 'https://deepwiki.com/filesystem-api' });
+      if (files.some(f => f.path.includes('parse'))) mechanisms.push({ name: 'AST Parsing', description: 'Parses code into an Abstract Syntax Tree.', docsUrl: 'https://docs.crawl4ai.com/concepts/ast', deepwikiUrl: 'https://deepwiki.com/ast-parsing' });
+      if (files.some(f => f.path.includes('auth'))) mechanisms.push({ name: 'JWT Authentication', description: 'Handles user authentication.', docsUrl: 'https://docs.crawl4ai.com/security/jwt', deepwikiUrl: 'https://deepwiki.com/jwt' });
+      const patterns: Pattern[] = MOCK_PATTERNS.filter(p => p.projectId === projectId);
+      if (patterns.length > 0 && entryPoints.length > 0) {
+        const mainFile = entryPoints[0];
+        const contentUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${mainFile}`;
+        const contentRes = await fetch(contentUrl, { headers: { 'User-Agent': 'LeverageOpenSource-App', 'Accept': 'application/vnd.github.raw' } });
+        if (contentRes.ok) {
+          const content = await contentRes.text();
+          patterns[0].snippet = content.substring(0, 500) + (content.length > 500 ? '...' : '');
+          patterns[0].filePaths = entryPoints;
+        }
+      }
+      const report: IngestionReport = {
+        projectId,
+        entryPoints,
+        mechanisms,
+        patterns,
+        fileTree: tree.map(t => ({ path: t.path, type: t.type })),
+        status: 'complete',
+      };
+      await projectEntity.patch({ status: 'completed', updatedAt: Date.now(), analysis: report });
+      return ok(c, report);
+    } catch (error) {
+      console.error('Analysis failed:', error);
+      await projectEntity.patch({ status: 'failed', updatedAt: Date.now() });
+      return bad(c, error instanceof Error ? error.message : 'Analysis failed');
+    }
   });
   // PATTERNS
   app.get('/api/patterns', async (c) => {
@@ -80,10 +113,10 @@ import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 export const ${name} = ({ title }) => (
   <Card>
-    <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
+    <CardHeader><CardTitle>{title || "Generated Component"}</CardTitle></CardHeader>
     <CardContent>
       <p>This is a generated component based on the "${pattern.title}" pattern.</p>
-      <pre className="bg-muted p-2 rounded-md mt-2 text-xs"><code>${pattern.snippet.replace(/</g, '&lt;')}</code></pre>
+      <pre className="bg-muted p-2 rounded-md mt-2 text-xs overflow-auto"><code>${pattern.snippet.replace(/</g, '&lt;')}</code></pre>
     </CardContent>
   </Card>
 );

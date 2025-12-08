@@ -21,6 +21,8 @@ export interface ChatMessage {
 }
 // LEVERAGE OpenSource Types
 export type ProjectStatus = 'pending' | 'analyzing' | 'completed' | 'failed';
+export type AnalysisStatus = 'fetching_tree' | 'parsing' | 'complete';
+export type ExportFormat = 'zip' | 'snippet';
 export interface Project {
   id: string;
   name: string;
@@ -28,6 +30,7 @@ export interface Project {
   status: ProjectStatus;
   createdAt: number; // epoch millis
   updatedAt: number; // epoch millis
+  analysis?: IngestionReport;
 }
 export interface Pattern {
   id: string;
@@ -47,6 +50,7 @@ export interface ComponentSpec {
   sourceTemplate: string;
   propsSchema: Record<string, 'string' | 'number' | 'boolean' | 'object'>;
   createdAt: number;
+  exportFormats?: ExportFormat[];
 }
 export interface MechanismOfAction {
   name: string;
@@ -54,9 +58,17 @@ export interface MechanismOfAction {
   docsUrl: string;
   deepwikiUrl: string;
 }
+export interface FileTreeNode {
+  path: string;
+  type: 'tree' | 'blob';
+  children?: FileTreeNode[];
+  content?: string;
+}
 export interface IngestionReport {
   projectId: string;
   entryPoints: string[];
   mechanisms: MechanismOfAction[];
   patterns: Pattern[];
+  fileTree?: FileTreeNode[];
+  status?: AnalysisStatus;
 }
