@@ -14,7 +14,8 @@ import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import JSZip from 'jszip';
-import { useAuthContext, ProtectedRoute } from '@/components/AuthProvider';
+import { useAuthContext } from '@/hooks/useAuthContext';
+import { ProtectedRoute } from '@/components/AuthProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 export default function ComponentStudio() {
   const { patternId } = useParams<{ patternId: string }>();
