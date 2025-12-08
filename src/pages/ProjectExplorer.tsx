@@ -7,7 +7,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowRight, BookOpen, BrainCircuit, Code, Folder, GitBranch as FileTreeIcon, Github, Link as LinkIcon, RefreshCw } from 'lucide-react';
+import { BookOpen, BrainCircuit, Code, Folder, GitBranch as FileTreeIcon, Github, Link as LinkIcon, RefreshCw } from 'lucide-react';
 import { PatternCard } from '@/components/PatternCard';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -17,24 +17,23 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { motion } from 'framer-motion';
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 const buildFileTree = (paths: FileTreeNode[]): FileTreeNode[] => {
-  const root: { [key: string]: FileTreeNode } = {};
+  const root: Record<string, FileTreeNode> = {};
+  const allNodes: Record<string, FileTreeNode> = {};
+  paths.forEach(item => {
+    allNodes[item.path] = { ...item, children: [] };
+  });
   paths.forEach(item => {
     const parts = item.path.split('/');
-    let currentLevel = root;
-    parts.forEach((part, index) => {
-      if (!currentLevel[part]) {
-        currentLevel[part] = {
-          path: parts.slice(0, index + 1).join('/'),
-          type: index === parts.length - 1 ? item.type : 'tree',
-          children: [],
-        };
+    if (parts.length > 1) {
+      const parentPath = parts.slice(0, -1).join('/');
+      if (allNodes[parentPath]) {
+        allNodes[parentPath].children?.push(allNodes[item.path]);
       }
-      if (index < parts.length - 1) {
-        currentLevel = currentLevel[part].children as unknown as { [key: string]: FileTreeNode };
-      }
-    });
+    } else {
+      root[item.path] = allNodes[item.path];
+    }
   });
   return Object.values(root);
 };
@@ -63,17 +62,19 @@ export default function ProjectExplorer() {
     queryFn: () => api(`/api/projects/${projectId}`),
     enabled: !!projectId,
   });
-  const { data: analysis, isLoading: isLoadingAnalysis, refetch: refetchAnalysis } = useQuery<IngestionReport>({
+  const { data: analysis, isLoading: isLoadingAnalysis, refetch: refetchAnalysis, isSuccess: isAnalysisSuccess } = useQuery<IngestionReport>({
     queryKey: ['analysis', projectId],
     queryFn: () => api(`/api/projects/${projectId}/analyze`, { method: 'POST' }),
     enabled: !!project && project.status === 'pending',
     refetchOnWindowFocus: false,
-    onSuccess: () => {
+  });
+  useEffect(() => {
+    if (isAnalysisSuccess) {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
     }
-  });
-  const report = project?.analysis || analysis;
-  const fileTree = useMemo(() => report?.fileTree ? buildFileTree(report.fileTree) : [], [report]);
+  }, [isAnalysisSuccess, queryClient, projectId]);
+  const report = project?.analysis ?? analysis;
+  const fileTree = useMemo(() => (report?.fileTree ? buildFileTree(report.fileTree) : []), [report]);
   if (isLoadingProject) return <ProjectExplorerSkeleton />;
   if (isError || !project) {
     return (
@@ -115,7 +116,7 @@ export default function ProjectExplorer() {
                 <CardContent>
                   {(isLoadingAnalysis && project.status !== 'completed') ? (
                     <div className="space-y-4 p-4"><Skeleton className="h-8 w-1/2" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /></div>
-                  ) : report?.mechanisms?.length ? (
+                  ) : report?.mechanisms && report.mechanisms.length > 0 ? (
                     <Accordion type="single" collapsible className="w-full">
                       {report.mechanisms.map((mech) => (
                         <motion.div key={mech.name} whileHover={{ backgroundColor: 'hsl(var(--muted))' }} className="rounded-md">
@@ -135,7 +136,7 @@ export default function ProjectExplorer() {
               <div>
                 <h2 className="text-2xl font-semibold mb-4">Identified Patterns</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {(isLoadingAnalysis && project.status !== 'completed') ? (<><Skeleton className="h-64 w-full" /><Skeleton className="h-64 w-full" /></>) : report?.patterns?.length ? (report.patterns.map(p => <PatternCard key={p.id} pattern={p} />)) : (<p className="text-muted-foreground md:col-span-2">No componentizable patterns found.</p>)}
+                  {(isLoadingAnalysis && project.status !== 'completed') ? (<><Skeleton className="h-64 w-full" /><Skeleton className="h-64 w-full" /></>) : report?.patterns && report.patterns.length > 0 ? (report.patterns.map(p => <PatternCard key={p.id} pattern={p} />)) : (<p className="text-muted-foreground md:col-span-2">No componentizable patterns found.</p>)}
                 </div>
               </div>
             </main>

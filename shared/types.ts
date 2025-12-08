@@ -3,26 +3,15 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
-// Minimal real-world chat example types (shared by frontend and worker)
-export interface User {
-  id: string;
-  name: string;
-}
-export interface Chat {
-  id: string;
-  title: string;
-}
-export interface ChatMessage {
-  id: string;
-  chatId: string;
-  userId: string;
-  text: string;
-  ts: number; // epoch millis
-}
 // LEVERAGE OpenSource Types
 export type ProjectStatus = 'pending' | 'analyzing' | 'completed' | 'failed';
 export type AnalysisStatus = 'fetching_tree' | 'parsing' | 'complete';
 export type ExportFormat = 'zip' | 'snippet';
+export interface User {
+  id: string;
+  name: string;
+  email?: string;
+}
 export interface Project {
   id: string;
   name: string;
@@ -31,6 +20,7 @@ export interface Project {
   createdAt: number; // epoch millis
   updatedAt: number; // epoch millis
   analysis?: IngestionReport;
+  ownerId?: string;
 }
 export interface Pattern {
   id: string;
@@ -51,6 +41,8 @@ export interface ComponentSpec {
   propsSchema: Record<string, 'string' | 'number' | 'boolean' | 'object'>;
   createdAt: number;
   exportFormats?: ExportFormat[];
+  version: string;
+  revisions?: ComponentSpec[];
 }
 export interface MechanismOfAction {
   name: string;
@@ -71,4 +63,16 @@ export interface IngestionReport {
   patterns: Pattern[];
   fileTree?: FileTreeNode[];
   status?: AnalysisStatus;
+}
+// Original Demo Types (kept for compatibility)
+export interface Chat {
+  id: string;
+  title: string;
+}
+export interface ChatMessage {
+  id: string;
+  chatId: string;
+  userId: string;
+  text: string;
+  ts: number; // epoch millis
 }

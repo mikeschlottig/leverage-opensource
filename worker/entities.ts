@@ -51,6 +51,6 @@ export class PatternEntity extends IndexedEntity<Pattern> {
 export class ComponentEntity extends IndexedEntity<ComponentSpec> {
   static readonly entityName = "component";
   static readonly indexName = "components";
-  static readonly initialState: ComponentSpec = { id: "", patternId: "", projectId: "", name: "", sourceTemplate: "", propsSchema: {}, createdAt: 0 };
+  static readonly initialState: ComponentSpec = { id: "", patternId: "", projectId: "", name: "", sourceTemplate: "", propsSchema: {}, createdAt: 0, version: "1.0", revisions: [] };
   static seedData = MOCK_COMPONENTS;
 }

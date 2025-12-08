@@ -3,9 +3,40 @@ import type { Env } from './core-utils';
 import { UserEntity, ChatBoardEntity, ProjectEntity, PatternEntity, ComponentEntity } from "./entities";
 import { ok, bad, notFound, isStr } from './core-utils';
 import { MOCK_PATTERNS } from "@shared/mock-data";
-import type { IngestionReport, Pattern, Project, ComponentSpec, FileTreeNode } from "@shared/types";
+import type { IngestionReport, Pattern, Project, ComponentSpec, User } from "@shared/types";
+async function getAuthedUser(c: any): Promise<User | null> {
+  const sessionId = c.req.header('X-Session-Id');
+  if (!isStr(sessionId)) return null;
+  const userEntity = new UserEntity(c.env, sessionId);
+  if (await userEntity.exists()) {
+    return userEntity.getState();
+  }
+  return null;
+}
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/test', (c) => c.json({ success: true, data: { name: 'CF Workers Demo' }}));
+  // --- AUTH Routes ---
+  app.post('/api/auth/session', async (c) => {
+    const sessionId = crypto.randomUUID();
+    const newUser: User = {
+      id: sessionId,
+      name: `User-${sessionId.substring(0, 6)}`,
+      email: `user-${sessionId.substring(0, 6)}@example.com`,
+    };
+    await UserEntity.create(c.env, newUser);
+    return ok(c, newUser);
+  });
+  app.get('/api/auth/session', async (c) => {
+    const user = await getAuthedUser(c);
+    if (!user) return notFound(c, 'Session not found or invalid.');
+    return ok(c, user);
+  });
+  // --- TELEMETRY ---
+  app.post('/api/telemetry', async (c) => {
+    const { event, data } = await c.req.json();
+    console.log('[TELEMETRY]', { event, data });
+    return ok(c, { received: true });
+  });
   // --- LEVERAGE OpenSource Routes ---
   // PROJECTS
   app.get('/api/projects', async (c) => {
@@ -19,6 +50,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     return ok(c, await project.getState());
   });
   app.post('/api/projects', async (c) => {
+    const user = await getAuthedUser(c);
+    if (!user) return bad(c, 'Unauthorized');
     const { name, repoUrl } = (await c.req.json()) as Partial<Project>;
     if (!isStr(name) || !isStr(repoUrl)) return bad(c, 'name and repoUrl required');
     const newProject: Project = {
@@ -28,6 +61,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       status: 'pending',
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      ownerId: user.id,
     };
     await ProjectEntity.create(c.env, newProject);
     return ok(c, newProject);
@@ -58,17 +92,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
       if (files.some(f => f.path.includes('ingest'))) mechanisms.push({ name: 'File System Traversal', description: 'Reads repository file structure.', docsUrl: 'https://docs.crawl4ai.com/concepts/traversal', deepwikiUrl: 'https://deepwiki.com/filesystem-api' });
       if (files.some(f => f.path.includes('parse'))) mechanisms.push({ name: 'AST Parsing', description: 'Parses code into an Abstract Syntax Tree.', docsUrl: 'https://docs.crawl4ai.com/concepts/ast', deepwikiUrl: 'https://deepwiki.com/ast-parsing' });
       if (files.some(f => f.path.includes('auth'))) mechanisms.push({ name: 'JWT Authentication', description: 'Handles user authentication.', docsUrl: 'https://docs.crawl4ai.com/security/jwt', deepwikiUrl: 'https://deepwiki.com/jwt' });
-      const patterns: Pattern[] = MOCK_PATTERNS.filter(p => p.projectId === projectId);
-      if (patterns.length > 0 && entryPoints.length > 0) {
-        const mainFile = entryPoints[0];
-        const contentUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${mainFile}`;
-        const contentRes = await fetch(contentUrl, { headers: { 'User-Agent': 'LeverageOpenSource-App', 'Accept': 'application/vnd.github.raw' } });
-        if (contentRes.ok) {
-          const content = await contentRes.text();
-          patterns[0].snippet = content.substring(0, 500) + (content.length > 500 ? '...' : '');
-          patterns[0].filePaths = entryPoints;
-        }
-      }
+      const patterns: Pattern[] = MOCK_PATTERNS.filter(p => p.projectId === 'proj_codetxt'); // Use mock for codetxt
       const report: IngestionReport = {
         projectId,
         entryPoints,
@@ -98,6 +122,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   });
   // COMPONENTS
   app.post('/api/components', async (c) => {
+    const user = await getAuthedUser(c);
+    if (!user) return bad(c, 'Unauthorized');
     const { patternId, name } = (await c.req.json()) as { patternId: string, name: string };
     if (!isStr(patternId) || !isStr(name)) return bad(c, 'patternId and name required');
     const patternEntity = new PatternEntity(c.env, patternId);
@@ -123,9 +149,17 @@ export const ${name} = ({ title }) => (
       `,
       propsSchema: { title: 'string' },
       createdAt: Date.now(),
+      version: '1.0',
+      revisions: [],
     };
     await ComponentEntity.create(c.env, newComponent);
     return ok(c, newComponent);
+  });
+  app.get('/api/components/:id/revisions', async (c) => {
+    const component = new ComponentEntity(c.env, c.req.param('id'));
+    if (!await component.exists()) return notFound(c, 'component not found');
+    const state = await component.getState();
+    return ok(c, { revisions: state.revisions ?? [] });
   });
   // --- Original Demo Routes ---
   // USERS

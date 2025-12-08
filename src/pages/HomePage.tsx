@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, Code, Cuboid, GitBranch, Search } from 'lucide-react';
+import { ArrowRight, Code, Cuboid, GitBranch, Search, LogOut, User as UserIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -10,8 +10,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api-client';
 import { Project } from '@shared/types';
 import { useState } from 'react';
+import { useAuthContext } from '@/main';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 export function HomePage() {
   const navigate = useNavigate();
+  const { user, logout, isAuthenticated, sessionId } = useAuthContext();
   const [repoUrl, setRepoUrl] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
   const handleIngest = async () => {
@@ -19,13 +29,19 @@ export function HomePage() {
       toast.error('Please enter a repository URL.');
       return;
     }
+    if (!isAuthenticated) {
+      toast.error('Please wait for session to initialize.');
+      return;
+    }
     setIsIngesting(true);
     try {
       const newProject = await api<Project>('/api/projects', {
         method: 'POST',
         body: JSON.stringify({ name: repoUrl.split('/').pop(), repoUrl }),
+        headers: { 'X-Session-Id': sessionId! }
       });
       toast.success(`Project "${newProject.name}" created. Starting analysis...`);
+      api('/api/telemetry', { method: 'POST', body: JSON.stringify({ event: 'project_ingest', data: { projectId: newProject.id } }) });
       navigate(`/projects/${newProject.id}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to ingest repository.');
@@ -36,7 +52,6 @@ export function HomePage() {
   const handleQuickIngest = async () => {
     setIsIngesting(true);
     try {
-      // This uses the seeded data on the backend
       toast.success(`Ingesting "codetxt" example...`);
       navigate(`/projects/proj_codetxt`);
     } catch (error) {
@@ -48,9 +63,28 @@ export function HomePage() {
   return (
     <AppLayout>
       <div className="relative min-h-screen w-full overflow-hidden">
-        <ThemeToggle className="absolute top-4 right-4 z-20" />
+        <div className="absolute top-4 right-4 z-20 flex items-center gap-4">
+          {isAuthenticated && user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="rounded-full">
+                  <UserIcon className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>{user.name}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={logout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <ThemeToggle className="relative top-0 right-0" />
+        </div>
         <div className="absolute inset-0 -z-10 h-full w-full bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#374151_1px,transparent_1px)] [background-size:16px_16px]"></div>
-        <div 
+        <div
           className="absolute top-0 left-0 right-0 -z-10 h-[40rem] w-full bg-cover bg-center"
           style={{
             backgroundImage: 'linear-gradient(to bottom, hsl(var(--background)), transparent), radial-gradient(circle at 50% 0, #F3802020, transparent 40%)',
