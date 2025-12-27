@@ -1,6 +1,6 @@
 # LEVERAGE OpenSource
 
-[![Deploy to Cloudflare][cloudflarebutton]]
+[![Deploy to Cloudflare][![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikeschlottig/leverage-opensource)]
 
 LEVERAGE OpenSource is a developer-facing SaaS-style tool (frontend on Cloudflare Workers edge) that analyzes open-source repositories, discovers repeatable patterns (features, ingestion engines, routing/logic, entry points), catalogs them, and turns them into production-ready, reusable React components and workflow templates. It indexes feature entry points per-project for fast retrieval and provides a Component Studio where extracted patterns can be previewed, parameterized and exported. Deep integrations (read-only) with [docs.crawl4ai.com](https://docs.crawl4ai.com) and [deepwiki.com](https://deepwiki.com) surface contextual documentation and mechanism-of-action metadata during analysis.
 
@@ -108,7 +108,7 @@ Deploy to Cloudflare Workers/Pages for edge deployment with Durable Objects pers
 
 For one-click deployment:
 
-[cloudflarebutton]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikeschlottig/leverage-opensource)
 
 #### Post-Deployment
 
